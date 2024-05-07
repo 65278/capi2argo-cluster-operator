@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -112,6 +113,9 @@ func TestReconcile(t *testing.T) {
 			t.Parallel()
 			ctxm := context.Background()
 			r, err := C2A.Reconcile(ctxm, tt.testMock)
+			if tt.testName == "process cluster with skip label" {
+				By("skipcluster")
+			}
 			if !tt.testExpectedError {
 				assert.NotNil(t, r)
 				assert.Nil(t, err)
@@ -149,6 +153,33 @@ func TestValidateObjectOwner(t *testing.T) {
 		"capi-to-argocd/owned": "false",
 	}
 	err = ValidateObjectOwner(o)
+	assert.NotNil(t, err)
+}
+
+func TestIgnoreCluster(t *testing.T) {
+	var c clusterv1.Cluster
+	c.ObjectMeta.Labels = map[string]string{
+		"capi-to-argocd/ignore": "true",
+	}
+
+	b, err := IgnoreCapiCluster(&c)
+	assert.Equal(t, b, true)
+	assert.Nil(t, err)
+
+	c.ObjectMeta.Labels = map[string]string{
+		"capi-to-argocd/ignore": "0",
+	}
+
+	b, err = IgnoreCapiCluster(&c)
+	assert.Equal(t, b, false)
+	assert.Nil(t, err)
+
+	c.ObjectMeta.Labels = map[string]string{
+		"capi-to-argocd/ignore": "355/113",
+	}
+
+	b, err = IgnoreCapiCluster(&c)
+	assert.Equal(t, b, true)
 	assert.NotNil(t, err)
 }
 

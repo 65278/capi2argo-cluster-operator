@@ -120,6 +120,12 @@ func (r *Capi2Argo) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 		log.Info("Failed to get Cluster object", "error", err)
 	}
 
+	// Skip Cluster if so desired.
+	if b, err := IgnoreCapiCluster(clusterObject); b == true {
+		log.Info("Ignoring Cluster due to capi-to-argocd/ignore label", "clusterName", clusterObject.ObjectMeta.Name)
+		return ctrl.Result{}, err
+	}
+
 	// Construct ArgoCluster from CapiCluster and CapiSecret.Metadata.
 	argoCluster, err := NewArgoCluster(capiCluster, &capiSecret, clusterObject)
 	if err != nil {
@@ -265,4 +271,17 @@ func ValidateObjectOwner(s corev1.Secret) error {
 		return goErr.New("not owned by CACO")
 	}
 	return nil
+}
+
+// IgnoreCapiCluster checks whether a capi cluster is supposed to be managed by CACO.
+func IgnoreCapiCluster(clusterObject *clusterv1.Cluster) (bool, error) {
+	// Skip Cluster if so desired.
+
+	if clusterObject.ObjectMeta.Labels["capi-to-argocd/ignore"] != "" {
+		v, err := strconv.ParseBool(clusterObject.Labels["capi-to-argocd/ignore"])
+		if err != nil || v == true {
+			return true, err
+		}
+	}
+	return false, nil
 }
