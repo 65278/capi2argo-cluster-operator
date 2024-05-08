@@ -3,7 +3,7 @@
 package controllers
 
 import (
-	// b64 "encoding/base64"
+	b64 "encoding/base64"
 	"encoding/json"
 	// "errors"
 	"fmt"
@@ -27,6 +27,7 @@ var (
 const (
 	clusterTakeAlongKey        = "take-along-label.capi-to-argocd."
 	clusterTakenFromClusterKey = "taken-from-cluster-label.capi-to-argocd."
+	clusterArgoNamespacesKey   = "argo-cluster-namespaces.capi-to-argocd"
 )
 
 // GetArgoCommonLabels holds a map of labels that reconciled objects must have.
@@ -39,12 +40,13 @@ func GetArgoCommonLabels() map[string]string {
 
 // ArgoCluster holds all information needed for CAPI --> Argo Cluster conversion
 type ArgoCluster struct {
-	NamespacedName  types.NamespacedName
-	ClusterName     string
-	ClusterServer   string
-	ClusterLabels   map[string]string
-	TakeAlongLabels map[string]string
-	ClusterConfig   ArgoConfig
+	NamespacedName    types.NamespacedName
+	ClusterName       string
+	ClusterNamespaces string
+	ClusterServer     string
+	ClusterLabels     map[string]string
+	TakeAlongLabels   map[string]string
+	ClusterConfig     ArgoConfig
 }
 
 // ArgoConfig represents Argo Cluster.JSON.config
@@ -73,9 +75,10 @@ func NewArgoCluster(c *CapiCluster, s *corev1.Secret, cluster *clusterv1.Cluster
 		}
 	}
 	return &ArgoCluster{
-		NamespacedName: BuildNamespacedName(s.ObjectMeta.Name, s.ObjectMeta.Namespace),
-		ClusterName:    BuildClusterName(c.KubeConfig.Clusters[0].Name, s.ObjectMeta.Namespace),
-		ClusterServer:  c.KubeConfig.Clusters[0].Cluster.Server,
+		NamespacedName:    BuildNamespacedName(s.ObjectMeta.Name, s.ObjectMeta.Namespace),
+		ClusterName:       BuildClusterName(c.KubeConfig.Clusters[0].Name, s.ObjectMeta.Namespace),
+		ClusterNamespaces: BuildClusterNamespaces(cluster.ObjectMeta.Labels[clusterArgoNamespacesKey]),
+		ClusterServer:     c.KubeConfig.Clusters[0].Cluster.Server,
 		ClusterLabels: map[string]string{
 			"capi-to-argocd/cluster-secret-name": c.Name + "-kubeconfig",
 			"capi-to-argocd/cluster-namespace":   c.Namespace,
@@ -143,6 +146,15 @@ func buildTakeAlongLabels(cluster *clusterv1.Cluster) (map[string]string, []stri
 	return takeAlongLabelsMap, errors
 }
 
+// BuildClusterNamespaces returns a base64 encoded string used by argocd to whitelist namespaces
+func BuildClusterNamespaces(s string) string {
+	_, err := b64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return b64.StdEncoding.EncodeToString([]byte(s))
+	}
+	return s
+}
+
 // BuildNamespacedName returns k8s native object identifier.
 func BuildNamespacedName(s string, namespace string) types.NamespacedName {
 	return types.NamespacedName{
@@ -192,9 +204,10 @@ func (a *ArgoCluster) ConvertToSecret() (*corev1.Secret, error) {
 			Labels:    mergedLabels,
 		},
 		Data: map[string][]byte{
-			"name":   []byte(a.ClusterName),
-			"server": []byte(a.ClusterServer),
-			"config": c,
+			"name":       []byte(a.ClusterName),
+			"server":     []byte(a.ClusterServer),
+			"config":     c,
+			"namespaces": []byte(a.ClusterNamespaces),
 		},
 	}
 	return argoSecret, nil

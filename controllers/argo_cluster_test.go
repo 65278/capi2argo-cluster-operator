@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -137,6 +138,70 @@ func TestBuildTakeAlongLabels(t *testing.T) {
 			assert.Equal(t, v, tt.testExpectedValues)
 		})
 	}
+}
+
+func TestNewArgoCluster(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		testName           string
+		testCluster        *clusterv1.Cluster
+		testSecret         *corev1.Secret
+		testCapiCluster    *CapiCluster
+		testExpectedError  bool
+		testExpectedValues *ArgoCluster
+	}{
+		{"Test Argo Namespaces Take Along",
+			&clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "testnamespace",
+					Labels: map[string]string{
+						"foo":                    "bar",
+						clusterArgoNamespacesKey: "dGVzdA==",
+					},
+				},
+			},
+			MockCapiSecret(true, true, true, "test", "testnamespace"),
+			MockCapiCluster(),
+			false, &ArgoCluster{
+				ClusterName:       "kube-cluster-test",
+				ClusterNamespaces: "dGVzdA==",
+			},
+		},
+		{"Test Argo Namespaces Take Along without Base64",
+			&clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "testnamespace",
+					Labels: map[string]string{
+						"foo":                    "bar",
+						clusterArgoNamespacesKey: "test,nobase64",
+					},
+				},
+			},
+			MockCapiSecret(true, true, true, "test", "testnamespace"),
+			MockCapiCluster(),
+			false, &ArgoCluster{
+				ClusterName:       "kube-cluster-test",
+				ClusterNamespaces: "dGVzdCxub2Jhc2U2NA==",
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.testName, func(t *testing.T) {
+			t.Parallel()
+			a, errors := NewArgoCluster(tt.testCapiCluster, tt.testSecret, tt.testCluster)
+			if tt.testExpectedError {
+				assert.NotEmpty(t, errors)
+			} else {
+				assert.Empty(t, errors)
+			}
+			assert.Equal(t, tt.testExpectedValues.ClusterName, a.ClusterName)
+			assert.Equal(t, tt.testExpectedValues.ClusterNamespaces, a.ClusterNamespaces)
+		})
+	}
+
 }
 
 func TestConvertToSecret(t *testing.T) {

@@ -2,12 +2,32 @@ package controllers
 
 import (
 	b64 "encoding/base64"
+	"gopkg.in/yaml.v2"
 	"log"
 	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func MockCapiCluster() *CapiCluster {
+	c := CapiCluster{
+		Name:      "test",
+		Namespace: "testnamespace",
+	}
+
+	RawKubeConfig, err := os.ReadFile("../tests/capi-kubeconfig-eks.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = yaml.Unmarshal(RawKubeConfig, &c.KubeConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return &c
+}
 
 // MockCapiKubeConfig returns a based64-encoded string that
 // represents a valid KubeConfig definition.

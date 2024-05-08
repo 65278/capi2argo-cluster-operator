@@ -193,6 +193,11 @@ func (r *Capi2Argo) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 			changed = true
 		}
 
+		if !bytes.Equal(existingSecret.Data["namespaces"], []byte(argoCluster.ClusterNamespaces)) {
+			existingSecret.Data["namespaces"] = []byte(argoCluster.ClusterNamespaces)
+			changed = true
+		}
+
 		// Check if take-along labels from argoCluster.TakeAlongLabels exist existingSecret.Labels and have the same values.
 		// If not set changed to true and update existingSecret.Labels.
 		log.Info("Checking for take-along labels")
