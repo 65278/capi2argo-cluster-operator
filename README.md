@@ -127,6 +127,41 @@ stringData:
 // ...
 ```
 
+## Take along argocd cluster namespaces
+Capi-2-Argo  Cluster operator is able to to take along a special label from a `Cluster` resources and add it as an [argocd cluster namespaces whitelisting annotation](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#clusters).
+
+To enable this feature, add a label with this format to the `Cluster` resource: `argo-cluster-namespaces.capi-to-argocd: "comma,separated,list"`. The value will be base64 encoded for you.
+
+The following example
+
+```yaml
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: ArgoCluster
+  namespace: default
+  labels:
+    argo-cluster-namespaces.capi-to-argocd: testnamespace
+spec:
+// ..
+```
+Results in the following `Secret` resource:
+
+```yaml
+kind: Secret
+apiVersion: v1
+type: Opaque
+metadata:
+  name: ArgoCluster
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+    capi-to-argocd/owned: "true"
+data:
+  namespaces: dGVzdG5hbWVzcGFjZQ==
+// ...
+```
+
 ## Use Cases
 
 1. Keeping your Production Pipelines DRY, everything as testable Code
