@@ -121,8 +121,8 @@ func (r *Capi2Argo) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 	}
 
 	// Skip Cluster if so desired.
-	if b, err := IgnoreCapiCluster(clusterObject); b == true {
-		log.Info("Ignoring Cluster due to capi-to-argocd/ignore label", "clusterName", clusterObject.ObjectMeta.Name)
+	if b, err := IgnoreCapiCluster(clusterObject); b {
+		log.Info("Ignoring Cluster due to capi-to-argocd/ignore label", clusterObject.ObjectMeta.Name)
 		return ctrl.Result{}, err
 	}
 
@@ -279,7 +279,7 @@ func IgnoreCapiCluster(clusterObject *clusterv1.Cluster) (bool, error) {
 
 	if clusterObject.ObjectMeta.Labels["capi-to-argocd/ignore"] != "" {
 		v, err := strconv.ParseBool(clusterObject.Labels["capi-to-argocd/ignore"])
-		if err != nil || v == true {
+		if err != nil || v {
 			return true, err
 		}
 	}

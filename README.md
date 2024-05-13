@@ -45,6 +45,7 @@ type: cluster.x-k8s.io/secret
 metadata:
   labels:
     cluster.x-k8s.io/cluster-name: CAPICluster
+    capi-to-argocd/ignore: "false" # Optional Capi2Argo ignore label
   name: CAPICluster-kubeconfig
 data:
   value: << CAPICluster KUBECONFIG based64-encoded >>
