@@ -12,24 +12,25 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func TestExtractTakeAlongLabel(t *testing.T) {
+func TestExtractTakeAlongArray(t *testing.T) {
 	t.Parallel()
+	metaType := GetMetaType(metaLabels)
 	tests := []struct {
 		testName           string
 		testMock           string
 		testExpectedError  bool
 		testExpectedValues string
 	}{
-		{"Test with valid take-along-labels label", fmt.Sprintf("%s%s", clusterTakeAlongKey, "foo"), false, "foo"},
-		{"Test with complex and valid take-along-labels label", fmt.Sprintf("%s%s", clusterTakeAlongKey, "my.mydomain.com/subkey"), false, "my.mydomain.com/subkey"},
-		{"Test with no take-along-labels labels", clusterTakeAlongKey, true, ""},
+		{"Test with valid take-along-labels label", fmt.Sprintf("%s%s", metaType.TakeAlong, "foo"), false, "foo"},
+		{"Test with complex and valid take-along-labels label", fmt.Sprintf("%s%s", metaType.TakeAlong, "my.mydomain.com/subkey"), false, "my.mydomain.com/subkey"},
+		{"Test with no take-along-labels labels", metaType.TakeAlong, true, ""},
 		{"Test with standard label", "mylabel", false, ""},
 	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.testName, func(t *testing.T) {
 			t.Parallel()
-			v, err := extractTakeAlongLabel(tt.testMock)
+			v, err := extractTakeAlongMeta(metaType.Name, tt.testMock)
 			if tt.testExpectedError {
 				assert.NotNil(t, err)
 			} else {
@@ -40,11 +41,14 @@ func TestExtractTakeAlongLabel(t *testing.T) {
 	}
 }
 
-func TestBuildTakeAlongLabels(t *testing.T) {
+func TestBuildTakeAlongArray(t *testing.T) {
 	t.Parallel()
+	labels := GetMetaType(metaLabels)
+	annotations := GetMetaType(metaAnnotations)
 	tests := []struct {
 		testName           string
 		testMock           *clusterv1.Cluster
+		testMetaType       int
 		testExpectedError  bool
 		testExpectedValues map[string]string
 	}{
@@ -57,7 +61,7 @@ func TestBuildTakeAlongLabels(t *testing.T) {
 						"foo": "bar",
 					},
 				},
-			}, false, map[string]string{}},
+			}, metaLabels, false, map[string]string{}},
 		{"Test with take-along-labels label (multiple)",
 			&clusterv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -67,15 +71,15 @@ func TestBuildTakeAlongLabels(t *testing.T) {
 						"test":                   "dont-take-along",
 						"foo":                    "bar",
 						"my.mydomain.com/subkey": "foo",
-						fmt.Sprintf("%s%s", clusterTakeAlongKey, "foo"):                    "",
-						fmt.Sprintf("%s%s", clusterTakeAlongKey, "my.mydomain.com/subkey"): "",
+						fmt.Sprintf("%s%s", labels.TakeAlong, "foo"):                    "",
+						fmt.Sprintf("%s%s", labels.TakeAlong, "my.mydomain.com/subkey"): "",
 					},
 				},
-			}, false, map[string]string{
+			}, metaLabels, false, map[string]string{
 				"foo":                    "bar",
 				"my.mydomain.com/subkey": "foo",
-				fmt.Sprintf("%s%s", clusterTakenFromClusterKey, "foo"):                    "",
-				fmt.Sprintf("%s%s", clusterTakenFromClusterKey, "my.mydomain.com/subkey"): "",
+				fmt.Sprintf("%s%s", labels.TakenFrom, "foo"):                    "",
+				fmt.Sprintf("%s%s", labels.TakenFrom, "my.mydomain.com/subkey"): "",
 			}},
 		{"Test with take-along-labels label (single)",
 			&clusterv1.Cluster{
@@ -86,12 +90,12 @@ func TestBuildTakeAlongLabels(t *testing.T) {
 						"test": "dont-take-along",
 						"bar":  "foo",
 						"foo":  "bar",
-						fmt.Sprintf("%s%s", clusterTakeAlongKey, "foo"): "",
+						fmt.Sprintf("%s%s", labels.TakeAlong, "foo"): "",
 					},
 				},
-			}, false, map[string]string{
+			}, metaLabels, false, map[string]string{
 				"foo": "bar",
-				fmt.Sprintf("%s%s", clusterTakenFromClusterKey, "foo"): "",
+				fmt.Sprintf("%s%s", labels.TakenFrom, "foo"): "",
 			}},
 		{"Test with take-along-labels label (single) and take-along-labels label not found",
 			&clusterv1.Cluster{
@@ -102,10 +106,10 @@ func TestBuildTakeAlongLabels(t *testing.T) {
 						"test": "dont-take-along",
 						"bar":  "foo",
 						"foo":  "bar",
-						fmt.Sprintf("%s%s", clusterTakeAlongKey, "invalid"): "",
+						fmt.Sprintf("%s%s", labels.TakeAlong, "invalid"): "",
 					},
 				},
-			}, true, map[string]string{}},
+			}, metaLabels, true, map[string]string{}},
 		{"Test with take-along-labels label (multiple) and take-along-labels label not found",
 			&clusterv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -115,20 +119,36 @@ func TestBuildTakeAlongLabels(t *testing.T) {
 						"test":                   "dont-take-along",
 						"bar":                    "foo",
 						"my.mydomain.com/subkey": "bar",
-						fmt.Sprintf("%s%s", clusterTakeAlongKey, "my.mydomain.com/subkey"): "",
-						fmt.Sprintf("%s%s", clusterTakeAlongKey, "invalid"):                "",
+						fmt.Sprintf("%s%s", labels.TakeAlong, "my.mydomain.com/subkey"): "",
+						fmt.Sprintf("%s%s", labels.TakeAlong, "invalid"):                "",
 					},
 				},
-			}, true, map[string]string{
+			}, metaLabels, true, map[string]string{
 				"my.mydomain.com/subkey": "bar",
-				fmt.Sprintf("%s%s", clusterTakenFromClusterKey, "my.mydomain.com/subkey"): "",
+				fmt.Sprintf("%s%s", labels.TakenFrom, "my.mydomain.com/subkey"): "",
+			}},
+		{"Test with take-along-annotations annotation (single)",
+			&clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+					Annotations: map[string]string{
+						"test": "dont-take-along",
+						"bar":  "foo",
+						"foo":  "bar",
+						fmt.Sprintf("%s%s", annotations.TakeAlong, "foo"): "",
+					},
+				},
+			}, metaAnnotations, false, map[string]string{
+				"foo": "bar",
+				fmt.Sprintf("%s%s", annotations.TakenFrom, "foo"): "",
 			}},
 	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.testName, func(t *testing.T) {
 			t.Parallel()
-			v, errors := buildTakeAlongLabels(tt.testMock)
+			v, errors := buildTakeAlongArray(tt.testMock, tt.testMetaType)
 			if tt.testExpectedError {
 				assert.NotEmpty(t, errors)
 			} else {

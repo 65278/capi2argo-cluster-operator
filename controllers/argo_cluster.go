@@ -25,8 +25,13 @@ var (
 )
 
 const (
-	clusterTakeAlongKey        = "take-along-label.capi-to-argocd."
-	clusterTakenFromClusterKey = "taken-from-cluster-label.capi-to-argocd."
+	metaAnnotations = iota
+	metaLabels
+)
+
+const (
+	clusterTakeAlongKeyFmt        = "take-along-%s.capi-to-argocd."
+	clusterTakenFromClusterKeyFmt = "taken-from-cluster-%s.capi-to-argocd."
 )
 
 // GetArgoCommonLabels holds a map of labels that reconciled objects must have.
@@ -37,20 +42,42 @@ func GetArgoCommonLabels() map[string]string {
 	}
 }
 
+// GetMetaType returns a struct of strings required to extract annotations and labels
+func GetMetaType(metaType int) MetaType {
+	var rv MetaType
+	switch metaType {
+	case metaAnnotations:
+		rv.Name = "annotation"
+	case metaLabels:
+		rv.Name = "label"
+	}
+	rv.TakeAlong = fmt.Sprintf(clusterTakeAlongKeyFmt, rv.Name)
+	rv.TakenFrom = fmt.Sprintf(clusterTakenFromClusterKeyFmt, rv.Name)
+	return rv
+}
+
 // ArgoCluster holds all information needed for CAPI --> Argo Cluster conversion
 type ArgoCluster struct {
-	NamespacedName  types.NamespacedName
-	ClusterName     string
-	ClusterServer   string
-	ClusterLabels   map[string]string
-	TakeAlongLabels map[string]string
-	ClusterConfig   ArgoConfig
+	NamespacedName       types.NamespacedName
+	ClusterName          string
+	ClusterServer        string
+	ClusterLabels        map[string]string
+	TakeAlongAnnotations map[string]string
+	TakeAlongLabels      map[string]string
+	ClusterConfig        ArgoConfig
 }
 
 // ArgoConfig represents Argo Cluster.JSON.config
 type ArgoConfig struct {
 	TLSClientConfig *ArgoTLS `json:"tlsClientConfig,omitempty"`
 	BearerToken     *string  `json:"bearerToken,omitempty"`
+}
+
+// MetaType holds info required to work with ObjectMeta annotations and labels
+type MetaType struct {
+	Name      string
+	TakeAlong string
+	TakenFrom string
 }
 
 // ArgoTLS represents Argo Cluster.JSON.config.tlsClientConfig
@@ -67,7 +94,14 @@ func NewArgoCluster(c *CapiCluster, s *corev1.Secret, cluster *clusterv1.Cluster
 	takeAlongLabels := map[string]string{}
 	var errList []string
 	if cluster != nil {
-		takeAlongLabels, errList = buildTakeAlongLabels(cluster)
+		takeAlongLabels, errList = buildTakeAlongArray(cluster, metaLabels)
+		for _, e := range errList {
+			log.Info(e)
+		}
+	}
+	takeAlongAnnotations := map[string]string{}
+	if cluster != nil {
+		takeAlongAnnotations, errList = buildTakeAlongArray(cluster, metaAnnotations)
 		for _, e := range errList {
 			log.Info(e)
 		}
@@ -80,7 +114,8 @@ func NewArgoCluster(c *CapiCluster, s *corev1.Secret, cluster *clusterv1.Cluster
 			"capi-to-argocd/cluster-secret-name": c.Name + "-kubeconfig",
 			"capi-to-argocd/cluster-namespace":   c.Namespace,
 		},
-		TakeAlongLabels: takeAlongLabels,
+		TakeAlongAnnotations: takeAlongAnnotations,
+		TakeAlongLabels:      takeAlongLabels,
 		ClusterConfig: ArgoConfig{
 			BearerToken: c.KubeConfig.Users[0].User.Token,
 			TLSClientConfig: &ArgoTLS{
@@ -92,55 +127,69 @@ func NewArgoCluster(c *CapiCluster, s *corev1.Secret, cluster *clusterv1.Cluster
 	}, nil
 }
 
-// extractTakeAlongLabel returns the take-along label key from a cluster resource
-func extractTakeAlongLabel(key string) (string, error) {
-	if strings.HasPrefix(key, clusterTakeAlongKey) {
-		splitResult := strings.Split(key, clusterTakeAlongKey)
+// extractTakeAlongMeta returns the take-along label/annotation key from a cluster resource
+func extractTakeAlongMeta(metaType string, key string) (string, error) {
+	takeAlong := fmt.Sprintf(clusterTakeAlongKeyFmt, metaType)
+	if strings.HasPrefix(key, takeAlong) {
+		splitResult := strings.Split(key, takeAlong)
 		if len(splitResult) >= 2 {
 			if splitResult[1] != "" {
 				return splitResult[1], nil
 			}
 		}
-		return "", fmt.Errorf("invalid take-along label. missing key after '/': %s", key)
+		return "", fmt.Errorf("invalid take-along %s. missing key after '/': %s", metaType, key)
 	}
 	// Not an take-along label. Return nil
 	return "", nil
 }
 
-// buildTakeAlongLabels returns a list of valid take-along labels from a cluster
-func buildTakeAlongLabels(cluster *clusterv1.Cluster) (map[string]string, []string) {
+// buildTakeAlongArray returns a list of valid take-along metadata from a cluster metadata object
+func buildTakeAlongArray(cluster *clusterv1.Cluster, metaType int) (map[string]string, []string) {
 	name := cluster.Name
 	namespace := cluster.Namespace
-	clusterLabels := cluster.Labels
+	var meta map[string]string
+	metaName := GetMetaType(metaType)
 
-	takeAlongLabels := []string{}
-	// Check labels keys that begin with clusterTakeAlongKey and extract the value after the last '/
-	for k := range clusterLabels {
-		l, err := extractTakeAlongLabel(k)
+	switch metaType {
+	case metaAnnotations:
+		meta = cluster.Annotations
+
+	case metaLabels:
+		meta = cluster.Labels
+
+	default:
+		return map[string]string{}, []string{}
+	}
+
+	takeAlongArray := []string{}
+
+	for k := range meta {
+		l, err := extractTakeAlongMeta(metaName.Name, k)
 		if err != nil {
 			return nil, []string{err.Error()}
 		}
 		if l != "" {
-			takeAlongLabels = append(takeAlongLabels, l)
+			takeAlongArray = append(takeAlongArray, l)
 		}
 	}
 
-	takeAlongLabelsMap := make(map[string]string)
+	takeAlongMap := make(map[string]string)
 
 	errors := []string{}
-	if len(takeAlongLabels) > 0 {
-		for _, label := range takeAlongLabels {
-			if label != "" {
-				if _, ok := clusterLabels[label]; !ok {
-					errors = append(errors, fmt.Sprintf("take-along label '%s' not found on cluster resource: %s, namespace: %s. Ignoring", label, name, namespace))
+	if len(takeAlongArray) > 0 {
+		for _, key := range takeAlongArray {
+			if key != "" {
+				if _, ok := meta[key]; !ok {
+					errors = append(errors, fmt.Sprintf("take-along %s '%s' not found on cluster resource: %s, namespace: %s. Ignoring", metaName.Name, key, name, namespace))
 					continue
 				}
-				takeAlongLabelsMap[label] = clusterLabels[label]
-				takeAlongLabelsMap[fmt.Sprintf("%s%s", clusterTakenFromClusterKey, label)] = ""
+				takeAlongMap[key] = meta[key]
+				takeAlongMap[fmt.Sprintf("%s%s", metaName.TakenFrom, key)] = ""
 			}
 		}
 	}
-	return takeAlongLabelsMap, errors
+
+	return takeAlongMap, errors
 }
 
 // BuildNamespacedName returns k8s native object identifier.

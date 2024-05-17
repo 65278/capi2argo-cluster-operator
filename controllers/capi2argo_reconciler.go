@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 
+	"fmt"
 	"slices"
 	"strings"
 
@@ -193,45 +194,65 @@ func (r *Capi2Argo) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 			changed = true
 		}
 
-		// Check if take-along labels from argoCluster.TakeAlongLabels exist existingSecret.Labels and have the same values.
-		// If not set changed to true and update existingSecret.Labels.
-		log.Info("Checking for take-along labels")
-		log.Info("Take along labels", "labels", argoCluster.TakeAlongLabels)
-		argoSecretTakenAlongLabels := []string{}
-		for l := range argoCluster.TakeAlongLabels {
-			if strings.HasPrefix(l, clusterTakenFromClusterKey) {
-				key := strings.Split(l, clusterTakenFromClusterKey)[1]
-				argoSecretTakenAlongLabels = append(argoSecretTakenAlongLabels, key)
-			}
-		}
-		// Find difference between secrets prefixed with `taken-from-cluster-label.capi-to-argocd`
-		// between existingSecret.Labels and argoSecretTakenAlongLabels
-		// in order to handle removed 'take-from'-labels from the cluster resource
-		for k := range existingSecret.Labels {
-			if strings.HasPrefix(k, clusterTakenFromClusterKey) {
-				key := strings.Split(k, clusterTakenFromClusterKey)[1]
-				if !slices.Contains(argoSecretTakenAlongLabels, key) {
-					delete(existingSecret.Labels, k)
-					delete(existingSecret.Labels, key)
-					changed = true
+		// Check if take-along labels/annotations from argoCluster.TakeAlongLabels/argoCluster.TakeAlongAnnotations
+		// exist in existingSecret.Labels/existingSecret.Annotations and have the same values.
+		// If not set changed to true and update existingSecret.Labels/existingSecret.Annotations
+		for metaType := range []int{metaLabels, metaAnnotations} {
+			metaTypeStruct := GetMetaType(metaType)
+			var argoClusterTakeAlongData map[string]string
+			var existingSecretTakeAlongData map[string]string
+			switch metaType {
+			case metaLabels:
+				argoClusterTakeAlongData = argoCluster.TakeAlongLabels
+				existingSecretTakeAlongData = existingSecret.Labels
+			case metaAnnotations:
+				argoClusterTakeAlongData = argoCluster.TakeAlongAnnotations
+				existingSecretTakeAlongData = existingSecret.ObjectMeta.Annotations
+				if existingSecretTakeAlongData == nil {
+					existingSecretTakeAlongData = make(map[string]string)
+					existingSecret.ObjectMeta.Annotations = existingSecretTakeAlongData
 				}
 			}
-		}
 
-		// Update secrets labels with current values
-		for k, v := range argoCluster.TakeAlongLabels {
-			// check if label exists in map
-			if val, ok := existingSecret.Labels[k]; ok {
-				// check if label value is the same
-				if val != v {
-					log.Info("Updating value of label in ArgoSecret", "label", k, "value", val)
-					existingSecret.Labels[k] = v
+			log.Info(fmt.Sprintf("Checking for take-along %s", metaTypeStruct.Name))
+			log.Info(fmt.Sprintf("Take along %s", metaTypeStruct.Name), metaTypeStruct.Name+"s", argoCluster.TakeAlongLabels)
+			argoSecretTakenAlongArray := []string{}
+
+			for l := range argoClusterTakeAlongData {
+				if strings.HasPrefix(l, metaTypeStruct.TakenFrom) {
+					key := strings.Split(l, metaTypeStruct.TakenFrom)[1]
+					argoSecretTakenAlongArray = append(argoSecretTakenAlongArray, key)
+				}
+			}
+			// Find difference between secrets prefixed with `taken-from-cluster-%s.capi-to-argocd`
+			// between existingSecretTakeAlongData and argoSecretTakenAlongData
+			// in order to handle removed 'take-from' labels/annotations from the cluster resource
+			for k := range existingSecretTakeAlongData {
+				if strings.HasPrefix(k, metaTypeStruct.TakenFrom) {
+					key := strings.Split(k, metaTypeStruct.TakenFrom)[1]
+					if !slices.Contains(argoSecretTakenAlongArray, key) {
+						delete(existingSecretTakeAlongData, k)
+						delete(existingSecretTakeAlongData, key)
+						changed = true
+					}
+				}
+			}
+
+			// Update secrets labels/annotations with current values
+			for k, v := range argoClusterTakeAlongData {
+				// check if label/annotation exists in map
+				if val, ok := existingSecretTakeAlongData[k]; ok {
+					// check if label/annotation value is the same
+					if val != v {
+						log.Info(fmt.Sprintf("Updating value of %s in ArgoSecret", metaTypeStruct.Name), metaTypeStruct.Name, k, "value", val)
+						existingSecretTakeAlongData[k] = v
+						changed = true
+					}
+				} else {
+					log.Info(fmt.Sprintf("Adding missing %s in ArgoSecret", metaTypeStruct.Name), metaTypeStruct.Name, k)
+					existingSecretTakeAlongData[k] = v
 					changed = true
 				}
-			} else {
-				log.Info("Adding missing label in ArgoSecret", "label", k)
-				existingSecret.Labels[k] = v
-				changed = true
 			}
 		}
 
