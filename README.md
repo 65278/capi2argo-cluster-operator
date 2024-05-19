@@ -85,11 +85,12 @@ Above functionality use-case can be demonstrated by extending the Workflow menti
 
 ![flow-with-capi2argo](docs/flow-with-operator.png)
 
-## Take along labels from cluster resources
+## Take along labels/annotations from cluster resources
 
-Capi-2-Argo Cluster Operator is able to take along labels from a `Cluster` resource and place them on the `Secret` resource that is created for the cluster. This is especially useful when using labels to instruct ArgoCD which clusters to sync with certain applications.
+Capi-2-Argo Cluster Operator is able to take along labels and annotations from a `Cluster` resource and place them on the `Secret` resource that is created for the cluster. This is especially useful when using labels to instruct ArgoCD which clusters to sync with certain applications.
 
-To enable this feature, add a label with this format to the `Cluster` resource: `take-along-label.capi-to-argocd.<label-key>: ""`.
+To take along labels, add a label with this format to the `Cluster` resource: `take-along-label.capi-to-argocd.<label-key>: ""`.
+To take along annotations, add an annotation with this format to the `Cluster` resource: `take-along-annotation.capi-to-argocd.<annotation-key>: ""`.
 
 The following example 
 
@@ -97,6 +98,9 @@ The following example
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata: 
+  annotations:
+    foo: bar
+    take-along-annotation.capi-to-argocd.foo: ""
   name: ArgoCluster
   namespace: default
   labels: 
@@ -114,6 +118,8 @@ kind: Secret
 apiVersion: v1
 type: Opaque
 metadata:
+  annotations:
+    foo: bar
   name: ArgoCluster
   namespace: argocd
   labels:
