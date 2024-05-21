@@ -3,7 +3,6 @@
 package controllers
 
 import (
-	b64 "encoding/base64"
 	"encoding/json"
 	// "errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -42,7 +42,7 @@ func GetArgoCommonLabels() map[string]string {
 type ArgoCluster struct {
 	NamespacedName    types.NamespacedName
 	ClusterName       string
-	ClusterNamespaces string
+	ClusterNamespaces *string
 	ClusterServer     string
 	ClusterLabels     map[string]string
 	TakeAlongLabels   map[string]string
@@ -77,7 +77,7 @@ func NewArgoCluster(c *CapiCluster, s *corev1.Secret, cluster *clusterv1.Cluster
 	return &ArgoCluster{
 		NamespacedName:    BuildNamespacedName(s.ObjectMeta.Name, s.ObjectMeta.Namespace),
 		ClusterName:       BuildClusterName(c.KubeConfig.Clusters[0].Name, s.ObjectMeta.Namespace),
-		ClusterNamespaces: BuildClusterNamespaces(cluster.ObjectMeta.Labels[clusterArgoNamespacesKey]),
+		ClusterNamespaces: ptr.To(cluster.ObjectMeta.Annotations[clusterArgoNamespacesKey]),
 		ClusterServer:     c.KubeConfig.Clusters[0].Cluster.Server,
 		ClusterLabels: map[string]string{
 			"capi-to-argocd/cluster-secret-name": c.Name + "-kubeconfig",
@@ -146,15 +146,6 @@ func buildTakeAlongLabels(cluster *clusterv1.Cluster) (map[string]string, []stri
 	return takeAlongLabelsMap, errors
 }
 
-// BuildClusterNamespaces returns a base64 encoded string used by argocd to whitelist namespaces
-func BuildClusterNamespaces(s string) string {
-	_, err := b64.StdEncoding.DecodeString(s)
-	if err != nil {
-		return b64.StdEncoding.EncodeToString([]byte(s))
-	}
-	return s
-}
-
 // BuildNamespacedName returns k8s native object identifier.
 func BuildNamespacedName(s string, namespace string) types.NamespacedName {
 	return types.NamespacedName{
@@ -204,11 +195,13 @@ func (a *ArgoCluster) ConvertToSecret() (*corev1.Secret, error) {
 			Labels:    mergedLabels,
 		},
 		Data: map[string][]byte{
-			"name":       []byte(a.ClusterName),
-			"server":     []byte(a.ClusterServer),
-			"config":     c,
-			"namespaces": []byte(a.ClusterNamespaces),
+			"name":   []byte(a.ClusterName),
+			"server": []byte(a.ClusterServer),
+			"config": c,
 		},
+	}
+	if a.ClusterNamespaces != nil {
+		argoSecret.Data["namespaces"] = []byte(*a.ClusterNamespaces)
 	}
 	return argoSecret, nil
 }

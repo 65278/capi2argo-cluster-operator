@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/yaml"
 )
@@ -156,8 +157,10 @@ func TestNewArgoCluster(t *testing.T) {
 					Name:      "test",
 					Namespace: "testnamespace",
 					Labels: map[string]string{
-						"foo":                    "bar",
-						clusterArgoNamespacesKey: "dGVzdA==",
+						"foo": "bar",
+					},
+					Annotations: map[string]string{
+						clusterArgoNamespacesKey: "test",
 					},
 				},
 			},
@@ -165,10 +168,10 @@ func TestNewArgoCluster(t *testing.T) {
 			MockCapiCluster(),
 			false, &ArgoCluster{
 				ClusterName:       "kube-cluster-test",
-				ClusterNamespaces: "dGVzdA==",
+				ClusterNamespaces: ptr.To("test"),
 			},
 		},
-		{"Test Argo Namespaces Take Along without Base64",
+		{"Test Argo Namespaces Take Along with missing annotation",
 			&clusterv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test",
@@ -183,7 +186,7 @@ func TestNewArgoCluster(t *testing.T) {
 			MockCapiCluster(),
 			false, &ArgoCluster{
 				ClusterName:       "kube-cluster-test",
-				ClusterNamespaces: "dGVzdCxub2Jhc2U2NA==",
+				ClusterNamespaces: nil,
 			},
 		},
 	}
@@ -198,7 +201,12 @@ func TestNewArgoCluster(t *testing.T) {
 				assert.Empty(t, errors)
 			}
 			assert.Equal(t, tt.testExpectedValues.ClusterName, a.ClusterName)
-			assert.Equal(t, tt.testExpectedValues.ClusterNamespaces, a.ClusterNamespaces)
+			if a.ClusterNamespaces != nil && tt.testExpectedValues.ClusterNamespaces != nil {
+				assert.Equal(t, *tt.testExpectedValues.ClusterNamespaces, *a.ClusterNamespaces)
+			} else {
+				var s *string
+				assert.Equal(t, tt.testExpectedValues.ClusterNamespaces, s)
+			}
 		})
 	}
 

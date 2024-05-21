@@ -193,8 +193,16 @@ func (r *Capi2Argo) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 			changed = true
 		}
 
-		if !bytes.Equal(existingSecret.Data["namespaces"], []byte(argoCluster.ClusterNamespaces)) {
-			existingSecret.Data["namespaces"] = []byte(argoCluster.ClusterNamespaces)
+		if argoCluster.ClusterNamespaces != nil {
+			if !bytes.Equal(existingSecret.Data["namespaces"], []byte(*argoCluster.ClusterNamespaces)) {
+				existingSecret.Data["namespaces"] = []byte(*argoCluster.ClusterNamespaces)
+				changed = true
+			}
+		}
+
+		if _, exists := existingSecret.Data["namespaces"]; exists && argoCluster.ClusterNamespaces == nil {
+			log.Info("Deleting argo-cd namespaces")
+			delete(existingSecret.Data, "namespaces")
 			changed = true
 		}
 

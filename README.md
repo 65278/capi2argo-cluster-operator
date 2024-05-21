@@ -128,20 +128,20 @@ stringData:
 ```
 
 ## Take along argocd cluster namespaces
-Capi-2-Argo  Cluster operator is able to to take along a special label from a `Cluster` resources and add it as an [argocd cluster namespaces whitelisting annotation](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#clusters).
+Capi-2-Argo Cluster operator is able to to take along a special annotation from a `Cluster` resource and add it as an [argocd cluster namespaces whitelisting annotation](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#clusters). It is required to be an annotation because of the 63 character limitation on labels, which are quickly exhausted.
 
-To enable this feature, add a label with this format to the `Cluster` resource: `argo-cluster-namespaces.capi-to-argocd: "comma,separated,list"`. The value will be base64 encoded for you.
+To enable this feature, add an annotation with this format to the `Cluster` resource: `argo-cluster-namespaces.capi-to-argocd: "comma,separated,list"`. The value will be base64 encoded for you.
 
-The following example
+The following example:
 
 ```yaml
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
+  annotations:
+    argo-cluster-namespaces.capi-to-argocd: testnamespace
   name: ArgoCluster
   namespace: default
-  labels:
-    argo-cluster-namespaces.capi-to-argocd: testnamespace
 spec:
 // ..
 ```
