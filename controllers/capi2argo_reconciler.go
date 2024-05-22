@@ -122,7 +122,7 @@ func (r *Capi2Argo) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 
 	// Skip Cluster if so desired.
 	if b, err := IgnoreCapiCluster(clusterObject); b {
-		log.Info("Ignoring Cluster due to capi-to-argocd/ignore label", clusterObject.ObjectMeta.Name)
+		log.Info("Ignoring Cluster due to capi-to-argocd/ignore label", "label", clusterObject.ObjectMeta.Name)
 		return ctrl.Result{}, err
 	}
 
