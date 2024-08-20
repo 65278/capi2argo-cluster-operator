@@ -28,6 +28,7 @@ const (
 	clusterTakeAlongKey        = "take-along-label.capi-to-argocd."
 	clusterTakenFromClusterKey = "taken-from-cluster-label.capi-to-argocd."
 	clusterArgoNamespacesKey   = "argo-cluster-namespaces.capi-to-argocd"
+	clusterArgoResourcesKey    = "argo-cluster-resources.capi-to-argocd"
 )
 
 // GetArgoCommonLabels holds a map of labels that reconciled objects must have.
@@ -43,6 +44,7 @@ type ArgoCluster struct {
 	NamespacedName    types.NamespacedName
 	ClusterName       string
 	ClusterNamespaces *string
+	ClusterResources  *string
 	ClusterServer     string
 	ClusterLabels     map[string]string
 	TakeAlongLabels   map[string]string
@@ -78,6 +80,7 @@ func NewArgoCluster(c *CapiCluster, s *corev1.Secret, cluster *clusterv1.Cluster
 		NamespacedName:    BuildNamespacedName(s.ObjectMeta.Name, s.ObjectMeta.Namespace),
 		ClusterName:       BuildClusterName(c.KubeConfig.Clusters[0].Name, s.ObjectMeta.Namespace),
 		ClusterNamespaces: ptr.To(cluster.ObjectMeta.Annotations[clusterArgoNamespacesKey]),
+		ClusterResources:  ptr.To(cluster.ObjectMeta.Annotations[clusterArgoResourcesKey]),
 		ClusterServer:     c.KubeConfig.Clusters[0].Cluster.Server,
 		ClusterLabels: map[string]string{
 			"capi-to-argocd/cluster-secret-name": c.Name + "-kubeconfig",
@@ -202,6 +205,9 @@ func (a *ArgoCluster) ConvertToSecret() (*corev1.Secret, error) {
 	}
 	if a.ClusterNamespaces != nil {
 		argoSecret.Data["namespaces"] = []byte(*a.ClusterNamespaces)
+	}
+	if a.ClusterResources != nil {
+		argoSecret.Data["clusterResources"] = []byte(*a.ClusterResources)
 	}
 	return argoSecret, nil
 }

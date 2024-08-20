@@ -189,6 +189,44 @@ func TestNewArgoCluster(t *testing.T) {
 				ClusterNamespaces: nil,
 			},
 		},
+		{"Test Argo clusterResources Take Along",
+			&clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "testnamespace",
+					Labels: map[string]string{
+						"foo": "bar",
+					},
+					Annotations: map[string]string{
+						clusterArgoResourcesKey: "true",
+					},
+				},
+			},
+			MockCapiSecret(true, true, true, "test", "testnamespace"),
+			MockCapiCluster(),
+			false, &ArgoCluster{
+				ClusterName:      "kube-cluster-test",
+				ClusterResources: ptr.To("true"),
+			},
+		},
+		{"Test Argo clusterResources Take Along with missing annotation",
+			&clusterv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "testnamespace",
+					Labels: map[string]string{
+						"foo":                   "bar",
+						clusterArgoResourcesKey: "true",
+					},
+				},
+			},
+			MockCapiSecret(true, true, true, "test", "testnamespace"),
+			MockCapiCluster(),
+			false, &ArgoCluster{
+				ClusterName:      "kube-cluster-test",
+				ClusterResources: nil,
+			},
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -206,6 +244,12 @@ func TestNewArgoCluster(t *testing.T) {
 			} else {
 				var s *string
 				assert.Equal(t, tt.testExpectedValues.ClusterNamespaces, s)
+			}
+			if a.ClusterResources != nil && tt.testExpectedValues.ClusterResources != nil {
+				assert.Equal(t, *tt.testExpectedValues.ClusterResources, *a.ClusterResources)
+			} else {
+				var s *string
+				assert.Equal(t, tt.testExpectedValues.ClusterResources, s)
 			}
 		})
 	}

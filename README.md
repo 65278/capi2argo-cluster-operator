@@ -96,16 +96,16 @@ The following example
 ```yaml
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
-metadata: 
+metadata:
   name: ArgoCluster
   namespace: default
-  labels: 
+  labels:
     foo: bar
     my.domain.com/env: stage
     take-along-label.capi-to-argocd.foo: ""
     take-along-label.capi-to-argocd.my.domain.com/env: ""
-spec: 
-// ..
+spec:
+// ...
 ```
 Results in the following `Secret` resource:
 
@@ -118,7 +118,7 @@ metadata:
   namespace: argocd
   labels:
     argocd.argoproj.io/secret-type: cluster
-    capi-to-argocd/owned: "true" 
+    capi-to-argocd/owned: "true"
     foo: bar
     my.domain.com/env: stage
     taken-from-cluster-label.capi-to-argocd.foo: ""
@@ -127,10 +127,12 @@ stringData:
 // ...
 ```
 
-## Take along argocd cluster namespaces
+## Take along argocd cluster namespaces and clusterResources
 Capi-2-Argo Cluster operator is able to to take along a special annotation from a `Cluster` resource and add it as an [argocd cluster namespaces whitelisting annotation](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#clusters). It is required to be an annotation because of the 63 character limitation on labels, which are quickly exhausted.
 
 To enable this feature, add an annotation with this format to the `Cluster` resource: `argo-cluster-namespaces.capi-to-argocd: "comma,separated,list"`. The value will be base64 encoded for you.
+
+If you enable this feature, you can also add an annotation `argo-cluster-clusterResources.capi-to-argocd: "true" || "false"`, this will be forwarded as a string to the argocd cluster secret spec and works as described in the argocd documentation above.
 
 The following example:
 
@@ -140,10 +142,11 @@ kind: Cluster
 metadata:
   annotations:
     argo-cluster-namespaces.capi-to-argocd: testnamespace
+    argo-cluster-clusterResources.capi-to-argocd: "true"
   name: ArgoCluster
   namespace: default
 spec:
-// ..
+// ...
 ```
 Results in the following `Secret` resource:
 
@@ -158,6 +161,7 @@ metadata:
     argocd.argoproj.io/secret-type: cluster
     capi-to-argocd/owned: "true"
 data:
+  clusterResources: dHJ1ZQ==
   namespaces: dGVzdG5hbWVzcGFjZQ==
 // ...
 ```

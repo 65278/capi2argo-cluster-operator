@@ -206,6 +206,19 @@ func (r *Capi2Argo) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resul
 			changed = true
 		}
 
+		if argoCluster.ClusterResources != nil {
+			if !bytes.Equal(existingSecret.Data["clusterResources"], []byte(*argoCluster.ClusterResources)) {
+				existingSecret.Data["clusterResources"] = []byte(*argoCluster.ClusterResources)
+				changed = true
+			}
+		}
+
+		if _, exists := existingSecret.Data["clusterResources"]; exists && argoCluster.ClusterResources == nil {
+			log.Info("Deleting argo-cd clusterResources")
+			delete(existingSecret.Data, "clusterResources")
+			changed = true
+		}
+
 		// Check if take-along labels from argoCluster.TakeAlongLabels exist existingSecret.Labels and have the same values.
 		// If not set changed to true and update existingSecret.Labels.
 		log.Info("Checking for take-along labels")
